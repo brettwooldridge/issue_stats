@@ -42,7 +42,7 @@ class Report < ActiveRecord::Base
   def bootstrap_async
     self.last_enqueued_at = DateTime.now
     save!
-    BootstrapReport.enqueue github_key
+    BootstrapReport.perform_later github_key
   end
 
   def bootstrap
@@ -98,7 +98,8 @@ class Report < ActiveRecord::Base
   end
 
   def distribution(type, tier)
-    send("#{type}_distribution")[tier.to_i]
+    hash = send("#{type}_distribution")
+    hash[tier.to_i] || hash[tier]
   end
 
   def fetch_metadata
@@ -117,10 +118,10 @@ class Report < ActiveRecord::Base
   end
 
   # variant is either 'issue' or 'pr'
-  def badge_url(variant, style = 'plastic', concise = false)
+  def badge_url(variant, style: 'plastic', concise: false)
     preamble, words, color = badge_values(variant, concise)
 
-    url = "http://img.shields.io/badge/#{URI.escape(preamble)}-"
+    url = "https://img.shields.io/badge/#{URI.escape(preamble)}-"
     url << "#{URI.escape(words)}-#{color}.svg"
     url << "?style=#{style}" if style
     url
@@ -131,22 +132,22 @@ class Report < ActiveRecord::Base
     { owner: owner, repository: repository }
   end
 
-  def badge_preamble(variant)
-    badge_values(variant)[0]
+  def badge_preamble(variant, concise = false)
+    badge_values(variant, concise)[0]
   end
 
-  def badge_words(variant)
-    badge_values(variant)[1]
+  def badge_words(variant, concise = false)
+    badge_values(variant, concise)[1]
   end
 
-  def badge_color(variant)
-    badge_values(variant)[2]
+  def badge_color(variant, concise = false)
+    badge_values(variant, concise)[2]
   end
 
   private
 
   # Returns [preable, words, color]
-  def badge_values(variant, concise)
+  def badge_values(variant, concise=false)
     duration = send("#{variant}_close_time")
     index = Issue.duration_index(duration)
 
